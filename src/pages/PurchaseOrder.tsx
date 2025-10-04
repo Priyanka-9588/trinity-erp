@@ -176,7 +176,11 @@ export default function PurchaseOrder() {
         delivery_date: deliveryDate,
         payment_terms: paymentTerms,
         other_instructions: otherInstructions,
-        ...totals,
+        basic_amount: totals.basicAmount,
+        sgst: totals.sgst,
+        cgst: totals.cgst,
+        igst: totals.igst,
+        grand_total: totals.grandTotal,
         status: "draft",
       })
       .select()
