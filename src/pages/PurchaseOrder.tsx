@@ -240,83 +240,192 @@ export default function PurchaseOrder() {
     const company = selectedCompany;
 
     const doc = new jsPDF();
-
-    // Header
-    doc.setFontSize(18);
+    
+    // Header - Company Name and PO Title
+    doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
-    doc.text("PURCHASE ORDER", 105, 20, { align: "center" });
-
-    // Company Details
+    doc.text(company?.name || "Company Name", 105, 15, { align: "center" });
+    
+    doc.setFontSize(14);
+    doc.text("PURCHASE ORDER", 105, 23, { align: "center" });
+    
+    // Company Address
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(company?.address || "", 105, 29, { align: "center" });
+    
+    // Border line
+    doc.setLineWidth(0.5);
+    doc.line(14, 33, 196, 33);
+    
+    // From and To Section
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
-    doc.text("From:", 14, 35);
+    doc.text("To:", 14, 40);
     doc.setFont("helvetica", "normal");
-    doc.text(company?.name || "", 14, 40);
-    doc.text(company?.address || "", 14, 45);
-    doc.text(`GSTIN: ${company?.gstin || "N/A"}`, 14, 50);
-    doc.text(`PAN: ${company?.pan_no || "N/A"}`, 14, 55);
-
-    // Supplier Details
+    doc.text(supplier?.party_name || "", 14, 45);
+    doc.setFontSize(9);
+    const supplierAddress = supplier?.party_address || "";
+    const addressLines = doc.splitTextToSize(supplierAddress, 80);
+    doc.text(addressLines, 14, 50);
+    
+    const addressHeight = addressLines.length * 4;
+    doc.text(`GSTIN: ${supplier?.gstin || "N/A"}`, 14, 50 + addressHeight);
+    doc.text(`Contact: ${supplier?.contact_person || ""}`, 14, 54 + addressHeight);
+    doc.text(`Phone: ${supplier?.contact_number || ""}`, 14, 58 + addressHeight);
+    
+    // PO Details on right
+    doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
-    doc.text("To:", 120, 35);
+    doc.text("PO Number:", 130, 40);
     doc.setFont("helvetica", "normal");
-    doc.text(supplier?.party_name || "", 120, 40);
-    doc.text(supplier?.party_address || "", 120, 45);
-    doc.text(`GSTIN: ${supplier?.gstin || "N/A"}`, 120, 50);
-
-    // PO Details
+    doc.text(po.po_number, 160, 40);
+    
     doc.setFont("helvetica", "bold");
-    doc.text(`PO Number: ${po.po_number}`, 14, 65);
-    doc.text(`Date: ${new Date(po.created_at).toLocaleDateString()}`, 14, 70);
+    doc.text("PO Date:", 130, 45);
+    doc.setFont("helvetica", "normal");
+    doc.text(new Date(po.created_at).toLocaleDateString(), 160, 45);
+    
     if (po.delivery_date) {
-      doc.text(`Delivery Date: ${new Date(po.delivery_date).toLocaleDateString()}`, 14, 75);
+      doc.setFont("helvetica", "bold");
+      doc.text("Delivery Date:", 130, 50);
+      doc.setFont("helvetica", "normal");
+      doc.text(new Date(po.delivery_date).toLocaleDateString(), 160, 50);
     }
-
+    
     // Line Items Table
+    const tableStartY = 75;
     const tableData = items?.map((item: any, index: number) => [
       index + 1,
       item.item_description,
-      item.make || "",
-      item.quantity,
+      item.make || "-",
+      item.quantity.toFixed(2),
       item.unit,
-      `₹${item.unit_rate.toFixed(2)}`,
-      `₹${item.discount.toFixed(2)}`,
-      `₹${item.amount.toFixed(2)}`,
+      item.unit_rate.toFixed(2),
+      item.discount.toFixed(2),
+      item.amount.toFixed(2),
     ]) || [];
 
     autoTable(doc, {
-      startY: 85,
-      head: [["S.No", "Description", "Make", "Qty", "Unit", "Rate", "Discount", "Amount"]],
+      startY: tableStartY,
+      head: [["S.No", "Item Description", "Make", "Quantity", "Unit", "Unit Rate", "Discount", "Amount"]],
       body: tableData,
+      foot: [[
+        "", "", "", 
+        (items?.reduce((sum: number, item: any) => sum + item.quantity, 0) || 0).toFixed(2),
+        "Nos", 
+        "Basic Amount", 
+        "",
+        po.basic_amount.toFixed(2)
+      ]],
       theme: "grid",
-      headStyles: { fillColor: [66, 139, 202], textColor: 255 },
+      headStyles: { 
+        fillColor: [70, 130, 180],
+        textColor: 255,
+        fontStyle: "bold",
+        halign: "center",
+        fontSize: 9
+      },
+      footStyles: {
+        fillColor: [240, 240, 240],
+        textColor: 0,
+        fontStyle: "bold",
+        fontSize: 9
+      },
+      bodyStyles: {
+        fontSize: 9
+      },
+      columnStyles: {
+        0: { halign: "center", cellWidth: 15 },
+        1: { cellWidth: 60 },
+        2: { cellWidth: 25 },
+        3: { halign: "right", cellWidth: 20 },
+        4: { halign: "center", cellWidth: 15 },
+        5: { halign: "right", cellWidth: 22 },
+        6: { halign: "right", cellWidth: 20 },
+        7: { halign: "right", cellWidth: 25 }
+      }
     });
 
-    const finalY = (doc as any).lastAutoTable.finalY + 10;
-
-    // Totals
+    const finalY = (doc as any).lastAutoTable.finalY + 5;
+    
+    // Tax Summary on right side
+    const taxStartX = 130;
+    doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
-    doc.text(`Basic Amount: ₹${po.basic_amount.toFixed(2)}`, 140, finalY);
-    doc.text(`SGST (9%): ₹${po.sgst.toFixed(2)}`, 140, finalY + 5);
-    doc.text(`CGST (9%): ₹${po.cgst.toFixed(2)}`, 140, finalY + 10);
-    doc.text(`IGST: ₹${po.igst.toFixed(2)}`, 140, finalY + 15);
+    
+    doc.text("SGST (9%):", taxStartX, finalY);
+    doc.text(`₹${po.sgst.toFixed(2)}`, 185, finalY, { align: "right" });
+    
+    doc.text("CGST (9%):", taxStartX, finalY + 5);
+    doc.text(`₹${po.cgst.toFixed(2)}`, 185, finalY + 5, { align: "right" });
+    
+    doc.text("IGST:", taxStartX, finalY + 10);
+    doc.text(`₹${po.igst.toFixed(2)}`, 185, finalY + 10, { align: "right" });
+    
+    // Grand Total with border
     doc.setFont("helvetica", "bold");
-    doc.text(`Grand Total: ₹${po.grand_total.toFixed(2)}`, 140, finalY + 22);
-
-    // Terms
+    doc.setFontSize(10);
+    doc.setLineWidth(0.3);
+    doc.rect(taxStartX - 2, finalY + 13, 58, 7);
+    doc.text("Grand Total:", taxStartX, finalY + 18);
+    doc.text(`₹${po.grand_total.toFixed(2)}`, 185, finalY + 18, { align: "right" });
+    
+    // Payment Terms Section
+    let currentY = finalY + 28;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("Payment Terms:", 14, currentY);
+    
     if (po.payment_terms) {
-      doc.setFont("helvetica", "bold");
-      doc.text("Payment Terms:", 14, finalY + 30);
       doc.setFont("helvetica", "normal");
-      doc.text(po.payment_terms, 14, finalY + 35, { maxWidth: 180 });
+      doc.setFontSize(9);
+      const paymentLines = doc.splitTextToSize(po.payment_terms, 180);
+      doc.text(paymentLines, 14, currentY + 5);
+      currentY += 5 + (paymentLines.length * 4);
     }
-
+    
+    // Delivery Time
+    currentY += 5;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("Delivery Time:", 14, currentY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    if (po.delivery_date) {
+      doc.text(`On or before ${new Date(po.delivery_date).toLocaleDateString()}`, 14, currentY + 5);
+    }
+    
+    // Other Instructions / Terms & Conditions
     if (po.other_instructions) {
+      currentY += 12;
       doc.setFont("helvetica", "bold");
-      doc.text("Other Instructions:", 14, finalY + 50);
+      doc.setFontSize(10);
+      doc.text("Other Instructions / Terms & Conditions:", 14, currentY);
       doc.setFont("helvetica", "normal");
-      doc.text(po.other_instructions, 14, finalY + 55, { maxWidth: 180 });
+      doc.setFontSize(9);
+      const instructionLines = doc.splitTextToSize(po.other_instructions, 180);
+      doc.text(instructionLines, 14, currentY + 5);
+      currentY += 5 + (instructionLines.length * 4);
     }
+    
+    // Footer - Company Details
+    const pageHeight = doc.internal.pageSize.height;
+    const footerY = pageHeight - 30;
+    
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.text(company?.name || "", 14, footerY);
+    doc.setFont("helvetica", "normal");
+    doc.text(company?.address || "", 14, footerY + 4);
+    doc.text(`GSTIN: ${company?.gstin || "N/A"} | PAN: ${company?.pan_no || "N/A"} | CIN: ${company?.cin_no || "N/A"}`, 14, footerY + 8);
+    doc.text(`Email: ${company?.email || "N/A"} | Contact: ${company?.contact_number || "N/A"}`, 14, footerY + 12);
+    
+    // Authorized Signatory
+    doc.setFont("helvetica", "bold");
+    doc.text("For " + (company?.name || "Company"), 150, footerY + 10);
+    doc.setFont("helvetica", "normal");
+    doc.text("Authorized Signatory", 150, footerY + 20);
 
     doc.save(`PO_${po.po_number}.pdf`);
     toast.success("PDF downloaded successfully");
