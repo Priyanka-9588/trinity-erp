@@ -383,9 +383,9 @@ export default function PurchaseOrder() {
       item.make || "-",
       item.quantity.toFixed(2),
       item.unit,
-      `₹ ${item.unit_rate.toFixed(2)}`,
-      `${item.discount.toFixed(2)}%`,
-      `₹ ${item.amount.toFixed(2)}`,
+      item.unit_rate.toFixed(2),
+      item.discount.toFixed(2),
+      item.amount.toFixed(2),
     ]) || [];
 
     // Add total row
@@ -398,7 +398,7 @@ export default function PurchaseOrder() {
       "Nos",
       "Basic Amount",
       "",
-      `₹ ${po.basic_amount.toFixed(2)}`
+      po.basic_amount.toFixed(2)
     ]);
 
     autoTable(doc, {
@@ -414,22 +414,43 @@ export default function PurchaseOrder() {
         halign: "center",
         fontSize: 8,
         lineWidth: 0.3,
-        lineColor: 0
+        lineColor: 0,
+        cellPadding: 1.5
       },
       bodyStyles: {
         fontSize: 7,
         lineWidth: 0.3,
-        lineColor: 0
+        lineColor: 0,
+        cellPadding: 1.5
       },
       columnStyles: {
         0: { halign: "center", cellWidth: 12 },
-        1: { cellWidth: 60 },
-        2: { cellWidth: 20, halign: "center" },
-        3: { halign: "right", cellWidth: 18 },
+        1: { cellWidth: 55 },
+        2: { cellWidth: 18, halign: "center" },
+        3: { halign: "right", cellWidth: 20 },
         4: { halign: "center", cellWidth: 12 },
-        5: { halign: "right", cellWidth: 22 },
-        6: { halign: "right", cellWidth: 18 },
-        7: { halign: "right", cellWidth: 24 }
+        5: { halign: "right", cellWidth: 24 },
+        6: { halign: "right", cellWidth: 20 },
+        7: { halign: "right", cellWidth: 25 }
+      },
+      didDrawCell: function(data) {
+        // Add currency/percentage symbols after the cell content
+        if (data.section === 'body') {
+          if (data.column.index === 5 && data.row.index !== tableData.length - 1) {
+            // Unit Rate - add ₹ prefix
+            doc.setFontSize(7);
+            doc.text('₹', data.cell.x + 2, data.cell.y + data.cell.height / 2 + 1);
+          } else if (data.column.index === 6 && data.row.index !== tableData.length - 1 && data.cell.text[0] !== '') {
+            // Discount - add % suffix
+            doc.setFontSize(7);
+            const textWidth = doc.getTextWidth(data.cell.text[0]);
+            doc.text('%', data.cell.x + data.cell.width - 2 - textWidth - 3, data.cell.y + data.cell.height / 2 + 1);
+          } else if (data.column.index === 7) {
+            // Amount - add ₹ prefix
+            doc.setFontSize(7);
+            doc.text('₹', data.cell.x + 2, data.cell.y + data.cell.height / 2 + 1);
+          }
+        }
       },
       didParseCell: function(data) {
         // Make the total row bold
@@ -467,7 +488,7 @@ export default function PurchaseOrder() {
     const taxTableX = rightColX;
     const taxTableY = finalY - 2;
     const taxTableWidth = 78;
-    let taxRowHeight = 4;
+    let taxRowHeight = 5;
     
     // Draw tax table
     doc.rect(taxTableX, taxTableY, taxTableWidth, taxRowHeight); // Freight row
@@ -477,37 +498,38 @@ export default function PurchaseOrder() {
     
     // Bold border for Grand Total
     doc.setLineWidth(0.5);
-    doc.rect(taxTableX, taxTableY + taxRowHeight * 4, taxTableWidth, taxRowHeight + 1);
+    doc.rect(taxTableX, taxTableY + taxRowHeight * 4, taxTableWidth, taxRowHeight);
     doc.setLineWidth(0.3);
     
-    // Vertical line for amounts column
-    doc.line(taxTableX + 50, taxTableY, taxTableX + 50, taxTableY + taxRowHeight * 5 + 1);
+    // Vertical lines for columns
+    doc.line(taxTableX + 35, taxTableY, taxTableX + 35, taxTableY + taxRowHeight * 5);
+    doc.line(taxTableX + 55, taxTableY, taxTableX + 55, taxTableY + taxRowHeight * 5);
     
     doc.setFontSize(7);
     doc.setFont("helvetica", "normal");
     
     // Freight
-    doc.text("Freight", taxTableX + 2, taxTableY + 3);
-    doc.text("Inclusive", taxTableX + 52, taxTableY + 3);
-    doc.text(`₹ ${(po.freight || 0).toFixed(2)}`, taxTableX + taxTableWidth - 2, taxTableY + 3, { align: "right" });
+    doc.text("Freight", taxTableX + 2, taxTableY + 3.5);
+    doc.text("Inclusive", taxTableX + 37, taxTableY + 3.5);
+    doc.text((po.freight || 0).toFixed(2), taxTableX + taxTableWidth - 2, taxTableY + 3.5, { align: "right" });
     
     // SGST
     const sgstPercent = po.basic_amount > 0 ? ((po.sgst / po.basic_amount) * 100).toFixed(2) : "9.00";
-    doc.text("SGST", taxTableX + 2, taxTableY + taxRowHeight + 3);
-    doc.text(`${sgstPercent}%`, taxTableX + 52, taxTableY + taxRowHeight + 3);
-    doc.text(`₹ ${po.sgst.toFixed(2)}`, taxTableX + taxTableWidth - 2, taxTableY + taxRowHeight + 3, { align: "right" });
+    doc.text("SGST", taxTableX + 2, taxTableY + taxRowHeight + 3.5);
+    doc.text(`${sgstPercent}%`, taxTableX + 37, taxTableY + taxRowHeight + 3.5);
+    doc.text(po.sgst.toFixed(2), taxTableX + taxTableWidth - 2, taxTableY + taxRowHeight + 3.5, { align: "right" });
     
     // CGST
     const cgstPercent = po.basic_amount > 0 ? ((po.cgst / po.basic_amount) * 100).toFixed(2) : "9.00";
-    doc.text("CGST", taxTableX + 2, taxTableY + taxRowHeight * 2 + 3);
-    doc.text(`${cgstPercent}%`, taxTableX + 52, taxTableY + taxRowHeight * 2 + 3);
-    doc.text(`₹ ${po.cgst.toFixed(2)}`, taxTableX + taxTableWidth - 2, taxTableY + taxRowHeight * 2 + 3, { align: "right" });
+    doc.text("CGST", taxTableX + 2, taxTableY + taxRowHeight * 2 + 3.5);
+    doc.text(`${cgstPercent}%`, taxTableX + 37, taxTableY + taxRowHeight * 2 + 3.5);
+    doc.text(po.cgst.toFixed(2), taxTableX + taxTableWidth - 2, taxTableY + taxRowHeight * 2 + 3.5, { align: "right" });
     
     // IGST
     const igstPercent = po.basic_amount > 0 ? ((po.igst / po.basic_amount) * 100).toFixed(2) : "0.00";
-    doc.text("IGST", taxTableX + 2, taxTableY + taxRowHeight * 3 + 3);
-    doc.text(`${igstPercent}%`, taxTableX + 52, taxTableY + taxRowHeight * 3 + 3);
-    doc.text(`₹ ${po.igst.toFixed(2)}`, taxTableX + taxTableWidth - 2, taxTableY + taxRowHeight * 3 + 3, { align: "right" });
+    doc.text("IGST", taxTableX + 2, taxTableY + taxRowHeight * 3 + 3.5);
+    doc.text(`${igstPercent}%`, taxTableX + 37, taxTableY + taxRowHeight * 3 + 3.5);
+    doc.text(po.igst.toFixed(2), taxTableX + taxTableWidth - 2, taxTableY + taxRowHeight * 3 + 3.5, { align: "right" });
     
     // Grand Total (bold)
     doc.setFont("helvetica", "bold");
