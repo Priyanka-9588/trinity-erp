@@ -19,10 +19,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, FileText } from "lucide-react";
+import { Plus, Trash2, FileText, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCompany } from "@/contexts/CompanyContext";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface POLineItem {
   id: string;
@@ -222,6 +224,103 @@ export default function PurchaseOrder() {
   };
 
   const totals = calculateTotals();
+
+  const downloadPDF = async (po: any) => {
+    const { data: items } = await supabase
+      .from("purchase_order_items")
+      .select("*")
+      .eq("po_id", po.id);
+
+    const { data: supplier } = await supabase
+      .from("supplier_master")
+      .select("*")
+      .eq("id", po.supplier_id)
+      .single();
+
+    const company = selectedCompany;
+
+    const doc = new jsPDF();
+
+    // Header
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("PURCHASE ORDER", 105, 20, { align: "center" });
+
+    // Company Details
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text("From:", 14, 35);
+    doc.setFont("helvetica", "normal");
+    doc.text(company?.name || "", 14, 40);
+    doc.text(company?.address || "", 14, 45);
+    doc.text(`GSTIN: ${company?.gstin || "N/A"}`, 14, 50);
+    doc.text(`PAN: ${company?.pan_no || "N/A"}`, 14, 55);
+
+    // Supplier Details
+    doc.setFont("helvetica", "bold");
+    doc.text("To:", 120, 35);
+    doc.setFont("helvetica", "normal");
+    doc.text(supplier?.party_name || "", 120, 40);
+    doc.text(supplier?.party_address || "", 120, 45);
+    doc.text(`GSTIN: ${supplier?.gstin || "N/A"}`, 120, 50);
+
+    // PO Details
+    doc.setFont("helvetica", "bold");
+    doc.text(`PO Number: ${po.po_number}`, 14, 65);
+    doc.text(`Date: ${new Date(po.created_at).toLocaleDateString()}`, 14, 70);
+    if (po.delivery_date) {
+      doc.text(`Delivery Date: ${new Date(po.delivery_date).toLocaleDateString()}`, 14, 75);
+    }
+
+    // Line Items Table
+    const tableData = items?.map((item: any, index: number) => [
+      index + 1,
+      item.item_description,
+      item.make || "",
+      item.quantity,
+      item.unit,
+      `₹${item.unit_rate.toFixed(2)}`,
+      `₹${item.discount.toFixed(2)}`,
+      `₹${item.amount.toFixed(2)}`,
+    ]) || [];
+
+    autoTable(doc, {
+      startY: 85,
+      head: [["S.No", "Description", "Make", "Qty", "Unit", "Rate", "Discount", "Amount"]],
+      body: tableData,
+      theme: "grid",
+      headStyles: { fillColor: [66, 139, 202], textColor: 255 },
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY + 10;
+
+    // Totals
+    doc.setFont("helvetica", "normal");
+    doc.text(`Basic Amount: ₹${po.basic_amount.toFixed(2)}`, 140, finalY);
+    doc.text(`SGST (9%): ₹${po.sgst.toFixed(2)}`, 140, finalY + 5);
+    doc.text(`CGST (9%): ₹${po.cgst.toFixed(2)}`, 140, finalY + 10);
+    doc.text(`IGST: ₹${po.igst.toFixed(2)}`, 140, finalY + 15);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Grand Total: ₹${po.grand_total.toFixed(2)}`, 140, finalY + 22);
+
+    // Terms
+    if (po.payment_terms) {
+      doc.setFont("helvetica", "bold");
+      doc.text("Payment Terms:", 14, finalY + 30);
+      doc.setFont("helvetica", "normal");
+      doc.text(po.payment_terms, 14, finalY + 35, { maxWidth: 180 });
+    }
+
+    if (po.other_instructions) {
+      doc.setFont("helvetica", "bold");
+      doc.text("Other Instructions:", 14, finalY + 50);
+      doc.setFont("helvetica", "normal");
+      doc.text(po.other_instructions, 14, finalY + 55, { maxWidth: 180 });
+    }
+
+    doc.save(`PO_${po.po_number}.pdf`);
+    toast.success("PDF downloaded successfully");
+  };
 
   return (
     <div className="space-y-6">
@@ -453,6 +552,7 @@ export default function PurchaseOrder() {
                 <TableHead>Date</TableHead>
                 <TableHead>Grand Total</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -466,6 +566,16 @@ export default function PurchaseOrder() {
                     <span className="px-2 py-1 rounded-full text-xs bg-secondary text-secondary-foreground">
                       {po.status}
                     </span>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => downloadPDF(po)}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}

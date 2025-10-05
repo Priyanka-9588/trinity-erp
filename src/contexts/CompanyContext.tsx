@@ -4,6 +4,13 @@ interface Company {
   id: string;
   name: string;
   code: string;
+  address?: string;
+  gstin?: string;
+  pan_no?: string;
+  cin_no?: string;
+  email?: string;
+  contact_number?: string;
+  website?: string;
 }
 
 interface CompanyContextType {
