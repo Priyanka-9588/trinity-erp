@@ -321,6 +321,29 @@ export default function PurchaseOrder() {
     setIsPreviewOpen(true);
   };
 
+  const handleDeletePO = async (poId: string) => {
+    try {
+      // Delete items first
+      await supabase
+        .from("purchase_order_items")
+        .delete()
+        .eq("po_id", poId);
+
+      // Then delete the PO
+      await supabase
+        .from("purchase_orders")
+        .delete()
+        .eq("id", poId);
+
+      toast.success("Purchase order deleted successfully");
+      setIsPreviewOpen(false);
+      loadPurchaseOrders();
+    } catch (error) {
+      console.error("Error deleting purchase order:", error);
+      toast.error("Failed to delete purchase order");
+    }
+  };
+
   const totals = calculateTotals();
 
   const downloadPDF = async (po: any) => {
@@ -1166,6 +1189,13 @@ export default function PurchaseOrder() {
                 }}>
                   <Download className="h-4 w-4 mr-2" />
                   Download PDF
+                </Button>
+                <Button 
+                  variant="destructive" 
+                  onClick={() => handleDeletePO(previewPO.id)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
                 </Button>
               </div>
             </div>
