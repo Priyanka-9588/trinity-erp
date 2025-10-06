@@ -19,7 +19,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, FileText, Download } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Plus, Trash2, FileText, Download, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCompany } from "@/contexts/CompanyContext";
@@ -86,6 +93,10 @@ export default function PurchaseOrder() {
   const [otherInstructions, setOtherInstructions] = useState<string>("");
   const [lineItems, setLineItems] = useState<POLineItem[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
+  const [previewPO, setPreviewPO] = useState<any>(null);
+  const [previewItems, setPreviewItems] = useState<any[]>([]);
+  const [previewSupplier, setPreviewSupplier] = useState<any>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (selectedCompany) {
@@ -290,6 +301,24 @@ export default function PurchaseOrder() {
     setLineItems([]);
     generatePONumber();
     loadPurchaseOrders();
+  };
+
+  const handlePreview = async (po: any) => {
+    const { data: items } = await supabase
+      .from("purchase_order_items")
+      .select("*")
+      .eq("po_id", po.id);
+
+    const { data: supplier } = await supabase
+      .from("supplier_master")
+      .select("*")
+      .eq("id", po.supplier_id)
+      .single();
+
+    setPreviewPO(po);
+    setPreviewItems(items || []);
+    setPreviewSupplier(supplier);
+    setIsPreviewOpen(true);
   };
 
   const totals = calculateTotals();
@@ -935,7 +964,6 @@ export default function PurchaseOrder() {
                 <TableHead>Supplier</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Grand Total</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -947,19 +975,24 @@ export default function PurchaseOrder() {
                   <TableCell>{new Date(po.created_at).toLocaleDateString()}</TableCell>
                   <TableCell>₹ {po.grand_total.toFixed(2)}</TableCell>
                   <TableCell>
-                    <span className="px-2 py-1 rounded-full text-xs bg-secondary text-secondary-foreground">
-                      {po.status}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => downloadPDF(po)}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handlePreview(po)}
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        Preview
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => downloadPDF(po)}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -967,6 +1000,178 @@ export default function PurchaseOrder() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Purchase Order Preview</DialogTitle>
+            <DialogDescription>
+              {previewPO?.po_number} - {previewSupplier?.party_name}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {previewPO && (
+            <div className="space-y-4">
+              {/* From Section */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-sm">From</h3>
+                  <div className="text-sm space-y-1">
+                    <p className="font-bold">{fromCompany?.name}</p>
+                    <p className="text-muted-foreground">{fromCompany?.address}</p>
+                    <p>Contact: {fromCompany?.contact_number}</p>
+                    <p>Contact Person: {fromCompany?.contact_person}</p>
+                    <p>Email: {fromCompany?.email}</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-sm">PO Details</h3>
+                  <div className="text-sm space-y-1 border p-3 rounded">
+                    <p><span className="font-semibold">PO Number:</span> {previewPO.po_number}</p>
+                    <p><span className="font-semibold">Date:</span> {new Date(previewPO.po_date).toLocaleDateString("en-GB")}</p>
+                    <div className="border-t pt-2 mt-2">
+                      <p className="font-semibold mb-1">Buyer Details</p>
+                      <p className="text-xs">GST: {fromCompany?.gstin || "N/A"}</p>
+                      <p className="text-xs">PAN: {fromCompany?.pan_no || "N/A"}</p>
+                    </div>
+                    <div className="border-t pt-2 mt-2">
+                      <p className="font-semibold mb-1">Seller Details</p>
+                      <p className="text-xs">GST: {previewSupplier?.gstin || "N/A"}</p>
+                      <p className="text-xs">PAN: {previewSupplier?.pan_no || "N/A"}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* To Section */}
+              <div className="space-y-2">
+                <h3 className="font-semibold text-sm">To</h3>
+                <div className="text-sm space-y-1">
+                  <p className="font-bold">{previewSupplier?.party_name}</p>
+                  <p className="text-muted-foreground">{previewSupplier?.party_address}</p>
+                  <p>Mobile: {previewSupplier?.contact_number}</p>
+                  <p>Email: {previewSupplier?.email_address}</p>
+                  <p>Contact Person: {previewSupplier?.contact_person}</p>
+                </div>
+              </div>
+
+              {/* Greeting */}
+              <div className="bg-muted/50 p-3 rounded text-sm">
+                <p>
+                  Dear Mr. {previewSupplier?.contact_person?.replace(/^(Mr\.|Ms\.|Mrs\.)\s*/i, '').split(' ')[0] || 'Sir/Madam'}, 
+                  we are pleased to issue this purchase order in your favor, please supply ordered bearings 
+                  as per the under mentioned items strictly as per terms & conditions as per below.
+                </p>
+              </div>
+
+              {/* Items Table */}
+              <div>
+                <h3 className="font-semibold text-sm mb-2">Line Items</h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">S.No.</TableHead>
+                      <TableHead>Item Description</TableHead>
+                      <TableHead>Make</TableHead>
+                      <TableHead className="text-right">Qty</TableHead>
+                      <TableHead>Unit</TableHead>
+                      <TableHead className="text-right">Rate</TableHead>
+                      <TableHead className="text-right">Discount</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {previewItems.map((item: any, index: number) => (
+                      <TableRow key={item.id}>
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell>{item.item_description}</TableCell>
+                        <TableCell>{item.make || "-"}</TableCell>
+                        <TableCell className="text-right">{item.quantity.toFixed(2)}</TableCell>
+                        <TableCell>{item.unit}</TableCell>
+                        <TableCell className="text-right">₹{item.unit_rate.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">{item.discount.toFixed(2)}%</TableCell>
+                        <TableCell className="text-right">₹{item.amount.toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="font-bold border-t-2">
+                      <TableCell colSpan={3} className="text-right">Total</TableCell>
+                      <TableCell className="text-right">
+                        {previewItems.reduce((sum: number, item: any) => sum + item.quantity, 0).toFixed(2)}
+                      </TableCell>
+                      <TableCell>Nos</TableCell>
+                      <TableCell colSpan={2} className="text-right">Basic Amount</TableCell>
+                      <TableCell className="text-right">₹{previewPO.basic_amount.toFixed(2)}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Tax Summary */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-sm">Payment Terms</h3>
+                  <p className="text-sm">{previewPO.payment_terms}</p>
+                  
+                  <h3 className="font-semibold text-sm mt-4">Delivery Time</h3>
+                  <p className="text-sm">
+                    {previewPO.delivery_date 
+                      ? `Within one week time i.e. on or before ${new Date(previewPO.delivery_date).toLocaleDateString("en-GB")}.`
+                      : "As per agreed terms."}
+                  </p>
+                </div>
+
+                <div className="border rounded p-3 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Freight:</span>
+                    <span>Inclusive - ₹{(previewPO.freight || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>SGST (9%):</span>
+                    <span>₹{previewPO.sgst.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>CGST (9%):</span>
+                    <span>₹{previewPO.cgst.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>IGST (0%):</span>
+                    <span>₹{previewPO.igst.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-base border-t-2 pt-2">
+                    <span>Grand Total:</span>
+                    <span>₹{previewPO.grand_total.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {previewPO.other_instructions && (
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-sm">Other Instructions Terms & Conditions</h3>
+                  <div className="text-sm space-y-1">
+                    {previewPO.other_instructions.split('\n').map((instruction: string, index: number) => (
+                      <p key={index}>{index + 1}. {instruction}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>
+                  Close
+                </Button>
+                <Button onClick={() => {
+                  downloadPDF(previewPO);
+                  setIsPreviewOpen(false);
+                }}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Download PDF
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
