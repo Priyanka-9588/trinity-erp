@@ -37,10 +37,49 @@ interface POLineItem {
   amount: number;
 }
 
+const FROM_COMPANIES = [
+  {
+    id: "wasco",
+    name: "WASCO INDUSTRIES",
+    address: "#Khasra No. 4/2/2/2/4, Harpala Road, Sikri Industrial Area, Ballabhgarh, Faridabad – 121004, Haryana, India.",
+    contact_number: "+91 9266776884",
+    contact_person: "Mr. Narendra Kumar Srivastava",
+    email: "profileautomation@gmail.com",
+    gstin: "",
+    pan_no: "",
+    code: "WASCO"
+  },
+  {
+    id: "profile",
+    name: "PROFILE AUTOMATION",
+    address: "#Plot No. C-128, Naraina Industrial Area, Phase-1, New Delhi – 110028, India.",
+    contact_number: "+91 9266776884",
+    contact_person: "Mr. Narendra Kumar Srivastava",
+    email: "profileautomation@gmail.com",
+    gstin: "",
+    pan_no: "",
+    code: "PROFILE"
+  },
+  {
+    id: "kaveri",
+    name: "KAVERI INDUSTRIES",
+    address: "#Khasra No. 4/2/2/2/4, Harpala Road, Sikri Industrial Area, Ballabhgarh, Faridabad – 121004, Haryana, India.",
+    contact_number: "+91 9266776884",
+    contact_person: "Mr. Narendra Kumar Srivastava",
+    email: "accounts@kaverinks.in",
+    gstin: "",
+    pan_no: "",
+    code: "KAVERI"
+  }
+];
+
 export default function PurchaseOrder() {
   const { selectedCompany } = useCompany();
+  const [fromCompany, setFromCompany] = useState<typeof FROM_COMPANIES[0] | null>(null);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [selectedSupplier, setSelectedSupplier] = useState<string>("");
+  const [supplierDetails, setSupplierDetails] = useState<any>(null);
+  const [items, setItems] = useState<any[]>([]);
   const [poNumber, setPoNumber] = useState<string>("");
   const [deliveryDate, setDeliveryDate] = useState<string>("");
   const [paymentTerms, setPaymentTerms] = useState<string>("100% against delivery of the material.");
@@ -52,24 +91,54 @@ export default function PurchaseOrder() {
     if (selectedCompany) {
       loadSuppliers();
       loadPurchaseOrders();
-      generatePONumber();
+      loadItems();
+      // Set default from company
+      if (!fromCompany) {
+        setFromCompany(FROM_COMPANIES[0]);
+      }
     }
   }, [selectedCompany]);
 
+  useEffect(() => {
+    if (fromCompany) {
+      generatePONumber();
+    }
+  }, [fromCompany]);
+
+  useEffect(() => {
+    if (selectedSupplier) {
+      const supplier = suppliers.find(s => s.id === selectedSupplier);
+      setSupplierDetails(supplier);
+    }
+  }, [selectedSupplier, suppliers]);
+
   const generatePONumber = async () => {
-    if (!selectedCompany) return;
+    if (!fromCompany) return;
 
     const year = new Date().getFullYear();
     const nextYear = year + 1;
     
     const { count } = await supabase
       .from("purchase_orders")
-      .select("*", { count: "exact", head: true })
-      .eq("company_id", selectedCompany.id);
+      .select("*", { count: "exact", head: true });
 
     const nextNumber = (count || 0) + 1;
-    const poNum = `PO/${selectedCompany.code}/${year}-${nextYear.toString().slice(-2)}/${String(nextNumber).padStart(4, "0")}`;
+    const poNum = `PO/${fromCompany.code}/${year}-${nextYear.toString().slice(-2)}/${String(nextNumber).padStart(4, "0")}`;
     setPoNumber(poNum);
+  };
+
+  const loadItems = async () => {
+    const { data, error } = await supabase
+      .from("purchase_item_master")
+      .select("*")
+      .order("item_name");
+
+    if (error) {
+      toast.error("Failed to load items");
+      return;
+    }
+
+    setItems(data || []);
   };
 
   const loadSuppliers = async () => {
@@ -157,8 +226,8 @@ export default function PurchaseOrder() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCompany || !selectedSupplier) {
-      toast.error("Please select company and supplier");
+    if (!fromCompany || !selectedSupplier) {
+      toast.error("Please select from company and supplier");
       return;
     }
 
@@ -237,7 +306,8 @@ export default function PurchaseOrder() {
       .eq("id", po.supplier_id)
       .single();
 
-    const company = selectedCompany;
+    // Get company from FROM_COMPANIES based on po details
+    const company = fromCompany;
     const doc = new jsPDF();
     
     // Draw outer border for entire document
@@ -364,13 +434,14 @@ export default function PurchaseOrder() {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     const contactPerson = supplier?.contact_person || "Sir/Madam";
+    const firstName = contactPerson.replace(/^(Mr\.|Ms\.|Mrs\.)\s*/i, '').split(' ')[0];
     doc.text(
-      `Dear ${contactPerson}, we are pleased to issue this purchase order in your favor, please supply ordered SSR`,
+      `Dear Mr. ${firstName}, we are pleased to issue this purchase order in your favor, please supply ordered bearings`,
       12,
       greetingY
     );
     doc.text(
-      `& HSR as per the under mentioned items strictly as per terms & conditions as per below.`,
+      `as per the under mentioned items strictly as per terms & conditions as per below.`,
       12,
       greetingY + 3.5
     );
@@ -604,8 +675,26 @@ export default function PurchaseOrder() {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>From (Company)</Label>
-                <Input value={selectedCompany?.name || ""} disabled />
+                <Label htmlFor="fromCompany">From (Company) *</Label>
+                <Select 
+                  value={fromCompany?.id || ""} 
+                  onValueChange={(value) => {
+                    const company = FROM_COMPANIES.find(c => c.id === value);
+                    setFromCompany(company || null);
+                  }} 
+                  required
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Company" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background z-50">
+                    {FROM_COMPANIES.map((company) => (
+                      <SelectItem key={company.id} value={company.id}>
+                        {company.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -614,7 +703,7 @@ export default function PurchaseOrder() {
                   <SelectTrigger>
                     <SelectValue placeholder="Select Supplier" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-background z-50">
                     {suppliers.map((supplier) => (
                       <SelectItem key={supplier.id} value={supplier.id}>
                         {supplier.party_name}
@@ -639,6 +728,18 @@ export default function PurchaseOrder() {
                 />
               </div>
             </div>
+
+            {supplierDetails && (
+              <div className="p-4 border rounded-lg bg-muted/50">
+                <h4 className="font-semibold mb-2">Supplier Details:</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div><span className="font-medium">Contact Person:</span> {supplierDetails.contact_person}</div>
+                  <div><span className="font-medium">Contact:</span> {supplierDetails.contact_number}</div>
+                  <div><span className="font-medium">Email:</span> {supplierDetails.email_address}</div>
+                  <div><span className="font-medium">Address:</span> {supplierDetails.party_address}</div>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -669,13 +770,30 @@ export default function PurchaseOrder() {
                       <TableRow key={item.id}>
                         <TableCell>{index + 1}</TableCell>
                         <TableCell>
-                          <Input
+                          <Select
                             value={item.item_description}
-                            onChange={(e) =>
-                              updateLineItem(item.id, "item_description", e.target.value)
-                            }
-                            required
-                          />
+                            onValueChange={(value) => {
+                              const selectedItem = items.find(i => i.item_name === value);
+                              if (selectedItem) {
+                                updateLineItem(item.id, "item_description", selectedItem.item_name);
+                                updateLineItem(item.id, "unit", selectedItem.uom || "Nos");
+                                updateLineItem(item.id, "unit_rate", selectedItem.unit_price || 0);
+                              } else {
+                                updateLineItem(item.id, "item_description", value);
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select or type item" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-background z-50">
+                              {items.map((itm) => (
+                                <SelectItem key={itm.id} value={itm.item_name}>
+                                  {itm.item_name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                         <TableCell>
                           <Input
